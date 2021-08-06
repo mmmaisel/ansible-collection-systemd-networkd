@@ -1,7 +1,13 @@
 #!/usr/bin/python
+""" Ansible module which generates systemd-networkd config files. """
 
 # Copyright: (c) 2021 - Max Maisel
-# GNU Affero General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/agpl-3.0.txt)
+# GNU Affero General Public License v3.0+
+# (see https://www.gnu.org/licenses/agpl-3.0.txt)
+
+import glob
+import os
+from ansible.module_utils.basic import AnsibleModule
 
 DOCUMENTATION = r'''
 ---
@@ -53,15 +59,31 @@ diff:
     sample {"before": "config1", "after" :"config2"}
 '''
 
-import glob
-import os
-
-from ansible.module_utils.basic import AnsibleModule
-
 NETWORKD_CFG_PATH = "/etc/systemd/network"
 
+def basic_network_block(network):
+    """ Processes general network attributes into a systemd-networkd
+    "[Network] config file block. """
+
+    network_block = "[Network]\n"
+    if "address" in network:
+        network_block += "Address={}\n".format(network["address"])
+    if "bridge" in network:
+        network_block += "Bridge={}\n".format(network["bridge"])
+    if "dhcp" in network:
+        network_block += "DHCP=ipv4\n"
+    if "dns" in network:
+        for server in network["dns"]:
+            network_block += "DNS={}\n".format(server)
+    if "gateway" in network:
+        network_block += "Gateway={}\n".format(network["gateway"])
+
+    return network_block
 
 def generate_config(networks):
+    """ Generates a dictionary of systemd-networkd config files from given
+    dictionary of Ansible task arguments. """
+
     files = {}
     for key in networks:
         network = networks[key]
@@ -70,20 +92,8 @@ def generate_config(networks):
                 .format(network["mac"])
             match_block = "[Match]\nName={}".format(key)
             link_block = "[Link]\nName={}".format(key)
-            network_block = "[Network]\n"
 
-            # XXX: deduplicate
-            if "address" in network:
-                network_block += "Address={}\n".format(network["address"])
-            if "bridge" in network:
-                network_block += "Bridge={}\n".format(network["bridge"])
-            if "dhcp" in network:
-                network_block += "DHCP=ipv4\n"
-            if "dns" in network:
-                for server in network["dns"]:
-                    network_block += "DNS={}\n".format(server)
-            if "gateway" in network:
-                network_block += "Gateway={}\n".format(network["gateway"])
+            network_block = basic_network_block(network)
             if "vlan" in network:
                 for vlan in network["vlan"]:
                     if "name" in vlan:
@@ -96,26 +106,15 @@ def generate_config(networks):
                         "[NetDev]\nName={}\nKind=vlan\n\n[VLAN]\nId={}\n" \
                         .format(name, vlan["id"])
 
-                    vnetwork_block = "[Match]\nName={}\n\n[Network]\n" \
-                        .format(name)
-                    if "address" in vlan:
-                        vnetwork_block += "Address={}\n".format(vlan["address"])
-                    if "bridge" in vlan:
-                        vnetwork_block += "Bridge={}\n".format(vlan["bridge"])
-                    if "dhcp" in vlan:
-                        vnetwork_block += "DHCP=ipv4\n"
-                    if "dns" in vlan:
-                        for server in vlan["dns"]:
-                            vnetwork_block += "DNS={}\n".format(server)
-                    if "gateway" in vlan:
-                        vnetwork_block += "Gateway={}\n".format(vlan["gateway"])
+                    vnetwork_block = "[Match]\nName={}\n\n".format(name)
+                    vnetwork_block += basic_network_block(vlan)
                     files["20-{}.network".format(name)] = vnetwork_block
 
             files["10-{}.link".format(key)] = \
                 "{}\n\n{}".format(link_match_block, link_block)
             files["10-{}.network".format(key)] = \
                 "{}\n\n{}".format(match_block, network_block)
-        if "bridge" in network and network["bridge"] == True:
+        if "bridge" in network and network["bridge"] is True:
             files["30-{}.netdev".format(key)] = \
                 "[NetDev]\nName={}\nKind=bridge\n".format(key)
             files["30-{}.network".format(key)] = \
@@ -125,13 +124,15 @@ def generate_config(networks):
     return files
 
 def read_config():
+    """ Reads current systemd-networkd configuration from the target machine
+    to a dictionary."""
+
     files = {}
     permissions = {}
     for filename in glob.glob("{}/*".format(NETWORKD_CFG_PATH)):
         name = os.path.basename(filename)
-        file = open(filename, "r")
-        content = file.read(-1)
-        file.close
+        with open(filename, "r") as file:
+            content = file.read(-1)
         files[name] = content
 
         stat = os.stat(filename)
@@ -143,12 +144,17 @@ def read_config():
     return files, permissions
 
 def files_to_string(files, perms):
+    """ Converts a dictionary of systemd-networkd files to a single string
+    for diffing. """
+
     acc = ""
     for key in sorted(files):
         acc += "***** {} *****\n{}\n{}\n\n".format(key, perms[key], files[key])
     return acc
 
 def run_module():
+    """ The main Ansible module function. """
+
     module_args = dict(
         networks=dict(type="dict", required=True)
     )
@@ -197,9 +203,8 @@ def run_module():
         module.exit_json(**result)
 
     for name in files_to_write:
-        f = open("{}/{}".format(NETWORKD_CFG_PATH, name), "w")
-        f.write(config_files[name])
-        f.close
+        with open("{}/{}".format(NETWORKD_CFG_PATH, name), "w") as file:
+            file.write(config_files[name])
 
     for name in files_to_remove:
         os.remove("{}/{}".format(NETWORKD_CFG_PATH, name))
@@ -214,6 +219,7 @@ def run_module():
 
 
 def main():
+    """ Program entry point. """
     run_module()
 
 
