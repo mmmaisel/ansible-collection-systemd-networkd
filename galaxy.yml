@@ -1,0 +1,22 @@
+---
+namespace: mmmaisel
+name: systemd_networkd
+version: 0.1.0
+description: An Ansible plugin to configure systemd-networkd
+readme: README.md
+
+authors:
+  - Max Maisel <max.maisel@posteo.de>
+
+license:
+  - AGPL-3.0-or-later
+
+tags:
+  - networking
+  - networkd
+  - systemd
+dependencies: {}
+build_ignore: []
+
+repository: http://github.com/mmmaisel/ansible-collection-systemd-networkd
+issues: http://github.com/mmmaisel/ansible-collection-systemd-networkd/issues
