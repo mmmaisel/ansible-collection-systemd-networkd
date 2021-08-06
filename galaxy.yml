@@ -16,7 +16,10 @@ tags:
   - networkd
   - systemd
 dependencies: {}
-build_ignore: []
+build_ignore:
+  - ".gitignore"
+  - "plugins/modules/systemd_networkd_test.py"
+  - "plugins/modules/.pytest_cache*"
 
 repository: http://github.com/mmmaisel/ansible-collection-systemd-networkd
 issues: http://github.com/mmmaisel/ansible-collection-systemd-networkd/issues
