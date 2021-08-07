@@ -17,7 +17,9 @@ short_description: Generates systemd_networkd configuration
 
 version_added: "0.1.0"
 
-description: Generates systemd_networkd configuration files
+description: >
+    Generates systemd_networkd configuration files.
+    Currently supports physical interfaces, berdges and VLANs.
 
 options:
     networks:
@@ -28,22 +30,37 @@ options:
         options:
             mac:
                 type: str
+                description: >
+                    The MAC address of this inferface.
+                    Required for interfaces of type "net".
             type:
+                type: str
                 choices: ["net", "bridge"]
+                description: The type of the interface.
             name:
                 type: str
                 required: true
+                description: The name ithat should be assigned to the interface.
             address:
                 type: str
+                description: >
+                    The static IP address of the interface in format
+                    "x.x.x.x/length".
             bridge:
                 type: str
+                description: >
+                    The name of the bridge is the interface should be assigned
+                    to a bridge.
             dhcp:
                 type: bool
+                description: True if the interface should use DHCPv4.
             dns:
                 type: list
                 elements: str
+                description: List of DNS server IP addresses.
             gateway:
                 type: str
+                description: Static IP address of the default gateway.
             vlan:
                 type: list
                 elements: dict
@@ -51,20 +68,32 @@ options:
                     id:
                         type: "int"
                         required: true
-                        name:
-                            type: str
-                            required: true
-                        address:
-                            type: str
-                        bridge:
-                            type: str
-                        dhcp:
-                            type: bool
-                        dns:
-                            type: list
-                            elements: str
-                        gateway:
-                            type: str
+                        description: VLAN ID of this virutal interface.
+                    name:
+                        type: str
+                        required: false
+                        description: >
+                            Name of the virtual interface.
+                    address:
+                        type: str
+                        description: >
+                            The static IP address of the interface in format
+                            "x.x.x.x/length".
+                    bridge:
+                        type: str
+                        description: >
+                            The name of the bridge is the interface should be
+                            assigned to a bridge.
+                    dhcp:
+                        type: bool
+                        description: True if the interface should use DHCPv4.
+                    dns:
+                        type: list
+                        elements: str
+                        description: List of DNS server IP addresses.
+                    gateway:
+                        type: str
+                        description: Static IP address of the default gateway.
 
 extends_documentation_fragment: ansible.builtin.files
 
