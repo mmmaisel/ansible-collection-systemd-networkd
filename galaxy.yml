@@ -1,7 +1,7 @@
 ---
 namespace: mmmaisel
 name: systemd_networkd
-version: 0.1.0
+version: 0.1.2
 description: An Ansible plugin to configure systemd-networkd
 readme: README.md
 

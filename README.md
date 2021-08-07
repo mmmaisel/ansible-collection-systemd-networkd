@@ -22,6 +22,19 @@ the file "plugins/modules/systemd_networkd.py".
         dhcp: true
 ```
 
+### Adjust systemd config file permissions
+```
+- name: Configure eth0 with DHCP
+  systemd_networkd:
+    mode: 0640
+    owner: root
+    group: users
+    networks:
+      - name: eth0
+        mac: "00:11:22:33:44:55"
+        dhcp: true
+```
+
 ### Complex single interface statically
 ```
 - name: Configure eth0 statically
