@@ -20,6 +20,8 @@ build_ignore:
   - ".gitignore"
   - "plugins/modules/systemd_networkd_test.py"
   - "plugins/modules/.pytest_cache*"
+  - "plugins/modules/__pycache__"
+  - "tests/output"
 
 repository: http://github.com/mmmaisel/ansible-collection-systemd-networkd
 issues: http://github.com/mmmaisel/ansible-collection-systemd-networkd/issues
