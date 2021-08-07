@@ -23,7 +23,48 @@ options:
     networks:
         description: Networks configuration
         required: true
-        type: dict
+        type: list
+        elements: dict
+        options:
+            mac:
+                type: str
+            type:
+                choices: ["net", "bridge"]
+            name:
+                type: str
+                required: true
+            address:
+                type: str
+            bridge:
+                type: str
+            dhcp:
+                type: bool
+            dns:
+                type: list
+                elements: str
+            gateway:
+                type: str
+            vlan:
+                type: list
+                elements: dict
+                options:
+                    id:
+                        type: "int"
+                        required: true
+                        name:
+                            type: str
+                            required: true
+                        address:
+                            type: str
+                        bridge:
+                            type: str
+                        dhcp:
+                            type: bool
+                        dns:
+                            type: list
+                            elements: str
+                        gateway:
+                            type: str
 
 author:
     - Max Maisel (@mmmaisel)
@@ -66,16 +107,16 @@ def basic_network_block(network):
     "[Network] config file block. """
 
     network_block = "[Network]\n"
-    if "address" in network:
+    if network["address"] is not None:
         network_block += "Address={}\n".format(network["address"])
-    if "bridge" in network:
+    if network["bridge"] is not None:
         network_block += "Bridge={}\n".format(network["bridge"])
-    if "dhcp" in network:
+    if network["dhcp"] is not None:
         network_block += "DHCP=ipv4\n"
-    if "dns" in network:
+    if network["dns"] is not None:
         for server in network["dns"]:
             network_block += "DNS={}\n".format(server)
-    if "gateway" in network:
+    if network["gateway"] is not None:
         network_block += "Gateway={}\n".format(network["gateway"])
 
     return network_block
@@ -85,41 +126,41 @@ def generate_config(networks):
     dictionary of Ansible task arguments. """
 
     files = {}
-    for key in networks:
-        network = networks[key]
-        if "mac" in network:
+    for network in networks:
+        name = network["name"]
+        if network["mac"] is not None:
             link_match_block = "[Match]\nMACAddress={}\nDriver=!802.1Q*" \
                 .format(network["mac"])
-            match_block = "[Match]\nName={}".format(key)
-            link_block = "[Link]\nName={}".format(key)
+            match_block = "[Match]\nName={}".format(name)
+            link_block = "[Link]\nName={}".format(name)
 
             network_block = basic_network_block(network)
-            if "vlan" in network:
+            if network["vlan"] is not None:
                 for vlan in network["vlan"]:
-                    if "name" in vlan:
-                        name = vlan["name"]
+                    if vlan["name"] is not None:
+                        vname = vlan["name"]
                     else:
-                        name = "{}.{}".format(key, vlan["id"])
+                        vname = "{}.{}".format(name, vlan["id"])
 
-                    network_block += "VLAN={}\n".format(name)
-                    files["20-{}.netdev".format(name)] = \
+                    network_block += "VLAN={}\n".format(vname)
+                    files["20-{}.netdev".format(vname)] = \
                         "[NetDev]\nName={}\nKind=vlan\n\n[VLAN]\nId={}\n" \
-                        .format(name, vlan["id"])
+                        .format(vname, vlan["id"])
 
-                    vnetwork_block = "[Match]\nName={}\n\n".format(name)
+                    vnetwork_block = "[Match]\nName={}\n\n".format(vname)
                     vnetwork_block += basic_network_block(vlan)
-                    files["20-{}.network".format(name)] = vnetwork_block
+                    files["20-{}.network".format(vname)] = vnetwork_block
 
-            files["10-{}.link".format(key)] = \
+            files["10-{}.link".format(name)] = \
                 "{}\n\n{}".format(link_match_block, link_block)
-            files["10-{}.network".format(key)] = \
+            files["10-{}.network".format(name)] = \
                 "{}\n\n{}".format(match_block, network_block)
-        if "bridge" in network and network["bridge"] is True:
-            files["30-{}.netdev".format(key)] = \
-                "[NetDev]\nName={}\nKind=bridge\n".format(key)
-            files["30-{}.network".format(key)] = \
+        if network["type"] == "bridge":
+            files["30-{}.netdev".format(name)] = \
+                "[NetDev]\nName={}\nKind=bridge\n".format(name)
+            files["30-{}.network".format(name)] = \
                 "[Match]\nName={}\n\n[Network]\nAddress={}\n" \
-                .format(key, network["address"])
+                .format(name, network["address"])
 
     return files
 
@@ -152,12 +193,82 @@ def files_to_string(files, perms):
         acc += "***** {} *****\n{}\n{}\n\n".format(key, perms[key], files[key])
     return acc
 
+def module_args():
+    """ Returns module argument specification. """
+
+    network_args = {
+        "name": {
+            "required": True,
+            "type": "str"
+        },
+        "address": {
+            "required": False,
+            "type": "str"
+        },
+        "bridge": {
+            "required": False,
+            "type": "str"
+        },
+        "dhcp": {
+            "required": False,
+            "type": "bool"
+        },
+        "dns": {
+            "required": False,
+            "type": "list",
+            "elements": "str"
+        },
+        "gateway": {
+            "required": False,
+            "type": "str"
+        }
+    }
+
+    args = {
+        "networks": {
+            "required": True,
+            "type": "list",
+            "elements": "dict",
+            "options": {
+                #**network_args,
+                "mac": {
+                    "type": "str"
+                },
+                "type": {
+                    "required": False,
+                    "type": "str",
+                    "default": "net"
+                },
+                "vlan": {
+                    "required": False,
+                    "type": "list",
+                    "elements": "dict",
+                    "options": {
+                        #**network_args,
+                        "id": {
+                            "required": True,
+                            "type": "int"
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    args["networks"]["options"].update(network_args.copy())
+    args["networks"]["options"]["vlan"]["options"]. \
+        update(network_args.copy())
+    args["networks"]["options"]["vlan"]["options"] \
+        ["name"]["required"] = False
+
+    return args
+
 def run_module():
     """ The main Ansible module function. """
 
-    module_args = dict(
-        networks=dict(type="dict", required=True)
-    )
+    required_if = [
+        ("type", "net", ("mac"))
+    ]
 
     result = dict(
         changed=False,
@@ -166,13 +277,10 @@ def run_module():
     )
 
     module = AnsibleModule(
-        argument_spec=module_args,
+        argument_spec=module_args(),
+        required_if=required_if,
         supports_check_mode=True
     )
-
-    # TODO: validate input
-    #if module.params['name'] == 'fail me':
-    #    module.fail_json(msg='You requested this to fail', **result)
 
     # TODO: set mode and owner from params
 

@@ -3,14 +3,35 @@ Ansible systemd_networkd module function"""
 
 from systemd_networkd import generate_config
 
+def with_defaults(args):
+    """ Adds default values to arguments. """
+    keys = ["name", "address", "bridge", "dhcp", "dns", "gateway", "mac",
+        "type", "vlan"]
+    for arg in args:
+        for key in keys:
+            if not key in arg:
+                arg[key] = None
+
+        if arg["vlan"] is not None:
+            vlan_keys = [
+                "id", "name", "address", "bridge", "dhcp", "dns", "gateway"
+            ]
+            for vlan in arg["vlan"]:
+                for vkey in vlan_keys:
+                    if not vkey in vlan:
+                        vlan[vkey] = None
+
+    return args
+
 def test_simple_dhcp_config():
     """ Tests if a single interfaces is configured correctly with DHCP. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "dhcp": True
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -33,16 +54,18 @@ def test_simple_dhcp_config():
 
 def test_multi_dhcp_config():
     """ Tests if two interfaces are configured correctly with DHCP. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "dhcp": True
         },
-        "eth1": {
+        {
+            "name": "eth1",
             "mac": "00:11:22:33:44:56",
             "dhcp": True
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -79,8 +102,9 @@ def test_multi_dhcp_config():
 def test_simple_static_config():
     """ Tests if a single interfaces is configured correctly with
     static configuration. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "address": "192.168.1.2/24",
             "gateway": "192.168.1.1",
@@ -89,7 +113,7 @@ def test_simple_static_config():
                 "8.8.8.8"
             ]
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -116,18 +140,20 @@ def test_simple_static_config():
 def test_vlan_bridge_configuration():
     """ Tests an interface is assigned to a bridge with an IP address
     correctly. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "vlan": [
                 { "id": 1, "bridge": "br1" }
             ]
         },
-        "br1": {
-            "bridge": True,
+        {
+            "name": "br1",
+            "type": "bridge",
             "address": "192.168.1.1/24"
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -173,14 +199,15 @@ def test_vlan_bridge_configuration():
 
 def test_vlan_with_name_and_dhcp_configuration():
     """ Tests if custom VLAN names work. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "vlan": [
                 { "id": 1, "name": "vlan1", "dhcp": True }
             ]
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -216,9 +243,9 @@ def test_vlan_with_name_and_dhcp_configuration():
 
 def test_vlan_with_name_and_static_configuration():
     """ Tests if static configuration work an a VLAN as well. """
-
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "vlan": [
                 {
@@ -229,7 +256,7 @@ def test_vlan_with_name_and_static_configuration():
                 }
             ]
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
@@ -268,15 +295,16 @@ def test_vlan_with_name_and_static_configuration():
 
 def test_multi_vlan_configuration():
     """ Tests if two VLANs can be assigned two one interface correctly. """
-    args = {
-        "eth0": {
+    args = with_defaults([
+        {
+            "name": "eth0",
             "mac": "00:11:22:33:44:55",
             "vlan": [
                 { "id": 1, "address": "192.168.1.2/24" },
                 { "id": 2, "address": "192.168.2.2/24" },
             ]
         }
-    }
+    ])
 
     expected = {
         '10-eth0.link':
