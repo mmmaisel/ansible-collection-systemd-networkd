@@ -66,6 +66,8 @@ options:
                         gateway:
                             type: str
 
+extends_documentation_fragment: ansible.builtin.files
+
 author:
     - Max Maisel (@mmmaisel)
 '''
@@ -164,25 +166,33 @@ def generate_config(networks):
 
     return files
 
+def set_attributes(module, config_files, changed, perm_diff):
+    """ Applies file attributes to files and generates attribute diff. """
+    for file in config_files:
+        path = "{}/{}".format(NETWORKD_CFG_PATH, file)
+        file_args = module.load_file_common_arguments(module.params, path)
+        diff = {}
+        changed |= module.set_fs_attributes_if_different(
+            file_args, changed, diff=diff)
+        if "before" in diff:
+            perm_diff["before"][file] = diff["before"]
+            perm_diff["after"][file] = diff["after"]
+    return changed
+
 def read_config():
     """ Reads current systemd-networkd configuration from the target machine
     to a dictionary."""
 
     files = {}
-    permissions = {}
     for filename in glob.glob("{}/*".format(NETWORKD_CFG_PATH)):
         name = os.path.basename(filename)
         with open(filename, "r") as file:
             content = file.read(-1)
         files[name] = content
 
-        stat = os.stat(filename)
-        permissions[name] = "* uid: {} gid: {} mode: {:o} *". \
-            format(stat.st_uid, stat.st_gid, stat.st_mode)
-
     for key in files:
         files[key] = files[key].rstrip("\n")
-    return files, permissions
+    return files
 
 def files_to_string(files, perms):
     """ Converts a dictionary of systemd-networkd files to a single string
@@ -190,7 +200,10 @@ def files_to_string(files, perms):
 
     acc = ""
     for key in sorted(files):
-        acc += "***** {} *****\n{}\n{}\n\n".format(key, perms[key], files[key])
+        acc += "***** {} *****\n".format(key)
+        if key in perms:
+            acc += "{}\n".format(perms[key])
+        acc += "{}\n\n".format(files[key])
     return acc
 
 def module_args():
@@ -272,6 +285,7 @@ def run_module():
 
     result = dict(
         changed=False,
+        diff={"before":"", "after": ""},
         modified=[],
         removed=[]
     )
@@ -279,18 +293,13 @@ def run_module():
     module = AnsibleModule(
         argument_spec=module_args(),
         required_if=required_if,
+        add_file_common_args=True,
         supports_check_mode=True
     )
 
-    # TODO: set mode and owner from params
-
     config_files = generate_config(module.params["networks"])
-    config_perms = {}
-    for file in config_files:
-        config_perms[file] = "* uid: 0 gid: 0 mode: 100644 *"
-    existing_config_files, existing_permissions = read_config()
-    result["changed"] = config_files != existing_config_files or \
-        config_perms != existing_permissions
+    existing_config_files = read_config()
+    result["changed"] = config_files != existing_config_files
 
     files_to_remove = \
         set(existing_config_files.keys()) - set(config_files.keys())
@@ -300,14 +309,14 @@ def run_module():
                 config_files[file] == existing_config_files[file]):
             files_to_write.add(file)
 
-    if module._diff:
-        result["diff"] = {
-                "before": files_to_string(existing_config_files,
-                    existing_permissions),
-                "after": files_to_string(config_files, config_perms)
-            }
-
+    perm_diff = {"before":{}, "after":{}}
     if module.check_mode:
+        result["changed"] |= set_attributes(
+            module, existing_config_files, result["changed"], perm_diff)
+        result["diff"] = {
+            "before": files_to_string(existing_config_files, perm_diff["before"]),
+            "after": files_to_string(config_files, perm_diff["after"])
+        }
         module.exit_json(**result)
 
     for name in files_to_write:
@@ -317,11 +326,12 @@ def run_module():
     for name in files_to_remove:
         os.remove("{}/{}".format(NETWORKD_CFG_PATH, name))
 
-    for file in config_files:
-        path = "{}/{}".format(NETWORKD_CFG_PATH, file)
-        module.set_mode_if_different(path, 0o644, False)
-        module.set_owner_if_different(path, "root", False)
-        module.set_group_if_different(path, "root", False)
+    result["changed"] |= set_attributes(
+        module, config_files, result["changed"], perm_diff)
+    result["diff"] = {
+        "before": files_to_string(existing_config_files, perm_diff["before"]),
+        "after": files_to_string(config_files, perm_diff["after"])
+    }
 
     module.exit_json(**result)
 
