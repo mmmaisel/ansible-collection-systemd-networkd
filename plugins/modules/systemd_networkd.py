@@ -228,8 +228,6 @@ def read_config():
             content = file.read(-1)
         files[name] = content
 
-    for key in files:
-        files[key] = files[key].rstrip("\n")
     return files
 
 
